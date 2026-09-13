@@ -1,0 +1,171 @@
+import { json, type RequestHandler } from "@sveltejs/kit";
+import db from "$lib/server/db/db";
+import { GetMonitorsParsed, DeleteMonitorCompletelyUsingTag } from "$lib/server/controllers/monitorsController";
+import type {
+  GetMonitorResponse,
+  MonitorResponse,
+  UpdateMonitorRequest,
+  UpdateMonitorResponse,
+  DeleteMonitorResponse,
+  BadRequestResponse,
+} from "$lib/types/api";
+
+export const GET: RequestHandler = async ({ locals }) => {
+  // Monitor is validated by middleware and available in locals
+  const monitor = locals.monitor!;
+
+  const response: GetMonitorResponse = {
+    monitor,
+  };
+
+  return json(response);
+};
+
+export const PATCH: RequestHandler = async ({ locals, request }) => {
+  // Monitor is validated by middleware and available in locals
+  const existingMonitor = locals.monitor!;
+  const monitorTag = existingMonitor.tag;
+
+  let body: UpdateMonitorRequest;
+
+  try {
+    body = await request.json();
+  } catch {
+    const errorResponse: BadRequestResponse = {
+      error: {
+        code: "BAD_REQUEST",
+        message: "Invalid JSON body",
+      },
+    };
+    return json(errorResponse, { status: 400 });
+  }
+
+  // Build update data - only include fields that are provided
+  const updateData: Record<string, unknown> = {
+    id: existingMonitor.id,
+    tag: existingMonitor.tag, // Tag cannot be changed
+  };
+
+  if (body.name !== undefined) {
+    if (typeof body.name !== "string" || body.name.trim().length === 0) {
+      const errorResponse: BadRequestResponse = {
+        error: {
+          code: "BAD_REQUEST",
+          message: "Name must be a non-empty string",
+        },
+      };
+      return json(errorResponse, { status: 400 });
+    }
+    updateData.name = body.name.trim();
+  } else {
+    updateData.name = existingMonitor.name;
+  }
+
+  updateData.description = body.description !== undefined ? body.description : existingMonitor.description;
+  updateData.image = body.image !== undefined ? body.image : existingMonitor.image;
+  updateData.cron = body.cron !== undefined ? body.cron : existingMonitor.cron;
+  updateData.default_status = body.default_status !== undefined ? body.default_status : existingMonitor.default_status;
+  updateData.status = body.status !== undefined ? body.status : existingMonitor.status;
+  updateData.category_name = body.category_name !== undefined ? body.category_name : existingMonitor.category_name;
+  updateData.monitor_type = body.monitor_type !== undefined ? body.monitor_type : existingMonitor.monitor_type;
+
+  updateData.is_hidden = body.is_hidden !== undefined ? body.is_hidden : existingMonitor.is_hidden;
+  updateData.external_url = body.external_url !== undefined ? body.external_url : existingMonitor.external_url;
+
+  if (body.confirmation_threshold === null) {
+    // Explicit null resets the grace period to the default (1 = off); undefined keeps the existing value.
+    updateData.confirmation_threshold = 1;
+  } else if (body.confirmation_threshold !== undefined) {
+    const ct = Number(body.confirmation_threshold);
+    if (!Number.isInteger(ct) || ct < 1 || ct > 60) {
+      const errorResponse: BadRequestResponse = {
+        error: { code: "BAD_REQUEST", message: "confirmation_threshold must be an integer between 1 and 60" },
+      };
+      return json(errorResponse, { status: 400 });
+    }
+    updateData.confirmation_threshold = ct;
+  } else {
+    updateData.confirmation_threshold = existingMonitor.confirmation_threshold ?? 1;
+  }
+
+  // Handle JSON fields - merge with existing data instead of replacing
+  if (body.type_data !== undefined) {
+    if (body.type_data === null) {
+      updateData.type_data = null;
+    } else {
+      // Parse existing type_data if it exists
+      let existingTypeData = {};
+      if (existingMonitor.type_data) {
+        try {
+          existingTypeData = existingMonitor.type_data;
+        } catch {
+          existingTypeData = {};
+        }
+      }
+      // Merge existing with new data
+      const mergedTypeData = { ...existingTypeData, ...body.type_data };
+      updateData.type_data = JSON.stringify(mergedTypeData);
+    }
+  } else {
+    updateData.type_data = JSON.stringify(existingMonitor.type_data);
+  }
+
+  if (body.monitor_settings_json !== undefined) {
+    if (body.monitor_settings_json === null) {
+      updateData.monitor_settings_json = null;
+    } else {
+      // Parse existing monitor_settings_json if it exists
+      let existingSettings = {};
+      if (existingMonitor.monitor_settings_json) {
+        try {
+          existingSettings = existingMonitor.monitor_settings_json;
+        } catch {
+          existingSettings = {};
+        }
+      }
+      // Merge existing with new data
+      const mergedSettings = { ...existingSettings, ...body.monitor_settings_json };
+      updateData.monitor_settings_json = JSON.stringify(mergedSettings);
+    }
+  } else {
+    updateData.monitor_settings_json = JSON.stringify(existingMonitor.monitor_settings_json);
+  }
+
+  await db.updateMonitor(updateData as unknown as Parameters<typeof db.updateMonitor>[0]);
+
+  // Fetch the updated monitor
+  const updatedMonitor = await GetMonitorsParsed({ tag: monitorTag }).then((monitors) => monitors[0]);
+
+  if (!updatedMonitor) {
+    const errorResponse: BadRequestResponse = {
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Failed to update monitor",
+      },
+    };
+    return json(errorResponse, { status: 500 });
+  }
+
+  const response: UpdateMonitorResponse = {
+    monitor: updatedMonitor,
+  };
+
+  return json(response);
+};
+
+export const DELETE: RequestHandler = async ({ locals }) => {
+  // Monitor is validated by middleware and available in locals
+  const monitor = locals.monitor!;
+
+  // Removes the monitor and everything keyed to its tag: monitoring data,
+  // incident/maintenance/page links, alerts, alert configs, group
+  // memberships (with weight rebalancing), and caches. The scheduler drops
+  // the orphaned BullMQ job on its next reconcile.
+  await DeleteMonitorCompletelyUsingTag(monitor.tag);
+
+  const response: DeleteMonitorResponse = {
+    message: `Monitor '${monitor.tag}' deleted successfully`,
+  };
+
+  return json(response);
+};

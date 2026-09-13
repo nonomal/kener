@@ -1,0 +1,59 @@
+import { GetRequiredSecrets, ReplaceAllOccurrences } from "../tool.js";
+import { describeError } from "./notification_utils.js";
+import Mustache from "mustache";
+import version from "../../version.js";
+
+export default async function send(
+  slackBody: string,
+  variables: Record<string, string | number | boolean>,
+  slackURL: string,
+) {
+  // Process trigger meta for environment secrets
+  let envSecrets = GetRequiredSecrets(slackBody + slackURL);
+
+  for (let i = 0; i < envSecrets.length; i++) {
+    const secret = envSecrets[i];
+    if (secret.replace !== undefined) {
+      slackBody = ReplaceAllOccurrences(slackBody, secret.find, secret.replace);
+      slackURL = ReplaceAllOccurrences(slackURL, secret.find, secret.replace);
+    }
+  }
+
+  const defaultHeaders = [
+    { key: "user-agent", value: `Kener/${version()}` },
+    { key: "accept", value: "application/json" },
+    { key: "content-type", value: "application/json" },
+  ];
+
+  // Render the webhook body with Mustache (disable HTML escaping for JSON/plain text)
+  const renderedBody = Mustache.render(slackBody, { ...variables }, {}, { escape: (text) => text });
+
+  // Build headers object
+  const headersObj: Record<string, string> = {};
+
+  for (const header of defaultHeaders) {
+    if (header.key && header.value) {
+      headersObj[header.key] = header.value;
+    }
+  }
+
+  try {
+    const response = await fetch(slackURL, {
+      method: "POST",
+      headers: headersObj,
+      body: renderedBody,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Slack webhook request failed with status ${response.status}: ${errorText}`);
+      return { error: `Slack webhook request failed with status ${response.status}`, details: errorText };
+    }
+
+    const responseData = await response.text();
+    return { success: true, status: response.status, data: responseData };
+  } catch (error) {
+    console.error("Error sending Slack notification", error);
+    return { error: `Error sending Slack notification: ${describeError(error)}`, details: error };
+  }
+}

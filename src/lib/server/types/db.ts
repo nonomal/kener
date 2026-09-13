@@ -1,0 +1,1022 @@
+// Server-only database types (based on migrations schema)
+import type { Knex } from "knex";
+import type { PageMonitorLayoutStyle } from "$lib/types/api";
+
+/** Audit column as returned by the driver: Date on pg/mysql, naive UTC text on SQLite. Parse before use. */
+export type DbTimestamp = Date | string;
+
+// ============ monitoring_data table ============
+export interface MonitoringData {
+  monitor_tag: string;
+  timestamp: number;
+  status: string | null;
+  latency: number | null;
+  type: string | null;
+  error_message?: string | null;
+  raw_status?: string | null;
+}
+
+export interface MonitoringDataInsert {
+  monitor_tag: string;
+  timestamp: number;
+  status: string;
+  latency: number;
+  type: string;
+  error_message?: string | null;
+  raw_status?: string | null;
+}
+
+export interface AggregatedMonitoringData {
+  DEGRADED: number;
+  UP: number;
+  DOWN: number;
+  avg_latency: number | null;
+  max_latency: number | null;
+  min_latency: number | null;
+}
+
+// ============ monitor_alerts table ============
+export interface MonitorAlert {
+  id: number;
+  monitor_tag: string;
+  monitor_status: string;
+  alert_status: string;
+  health_checks: number;
+  incident_number: number;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface MonitorAlertInsert {
+  monitor_tag: string;
+  monitor_status: string;
+  alert_status: string;
+  health_checks: number;
+  config_id?: number;
+}
+
+// ============ site_data table ============
+export interface SiteData {
+  id: number;
+  key: string;
+  value: string;
+  data_type: string;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+// ============ monitors table ============
+export interface MonitorRecord {
+  id: number;
+  tag: string;
+  name: string;
+  description: string | null;
+  image: string | null;
+  cron: string | null;
+  default_status: string;
+  status: string | null;
+  category_name: string | null;
+  monitor_type: string;
+  down_trigger?: string | null;
+  degraded_trigger?: string | null;
+  type_data?: string | null;
+  external_url?: string | null;
+  day_degraded_minimum_count?: number | null;
+  day_down_minimum_count?: number | null;
+  confirmation_threshold?: number | null;
+  include_degraded_in_downtime?: string;
+  is_hidden: string;
+  monitor_settings_json: string | null;
+  created_at?: DbTimestamp;
+  updated_at?: DbTimestamp;
+}
+export interface MonitorSharingOptions {
+  showShareBadgeMonitor: boolean;
+  showShareEmbedMonitor: boolean;
+}
+export interface MonitorSettings {
+  uptime_formula_numerator?: string;
+  uptime_formula_denominator?: string;
+  monitor_status_history_days?: {
+    desktop: number;
+    mobile: number;
+  };
+  sharing_options?: MonitorSharingOptions;
+}
+
+export interface TimestampStatusCount {
+  ts: number;
+  countOfUp: number;
+  countOfDown: number;
+  countOfDegraded: number;
+  countOfMaintenance: number;
+  avgLatency: number;
+  maxLatency: number;
+  minLatency: number;
+}
+
+export interface TimestampStatusCountByMonitor extends TimestampStatusCount {
+  monitor_tag: string;
+}
+export interface UptimeCalculatorResult {
+  uptime: string;
+  avgLatency: string;
+  maxLatency: string;
+  minLatency: string;
+}
+
+export interface MonitorRecordTyped {
+  id: number;
+  tag: string;
+  name: string;
+  description: string | null;
+  image: string | null;
+  cron: string | null;
+  default_status: string | null;
+  status: string | null;
+  category_name: string | null;
+  monitor_type: string;
+  down_trigger?: string | null;
+  degraded_trigger?: string | null;
+  type_data: Record<string, unknown> | null;
+  day_degraded_minimum_count?: number | null;
+  day_down_minimum_count?: number | null;
+  confirmation_threshold?: number | null;
+  include_degraded_in_downtime?: string;
+  is_hidden: string;
+  monitor_settings_json: MonitorSettings | null;
+  created_at?: DbTimestamp;
+  updated_at?: DbTimestamp;
+  external_url?: string | null;
+}
+
+export interface MonitorRecordInsert {
+  tag: string;
+  name: string;
+  description?: string | null;
+  image?: string | null;
+  cron?: string | null;
+  default_status?: string | null;
+  status?: string | null;
+  category_name?: string | null;
+  monitor_type?: string | null;
+  down_trigger?: string | null;
+  degraded_trigger?: string | null;
+  type_data?: string | null;
+  day_degraded_minimum_count?: number | null;
+  day_down_minimum_count?: number | null;
+  confirmation_threshold?: number | null;
+  include_degraded_in_downtime?: string;
+  is_hidden?: string;
+  monitor_settings_json?: string | null;
+  external_url?: string | null;
+}
+
+// ============ triggers table ============
+export interface TriggerRecord {
+  id: number;
+  name: string;
+  trigger_type: string | null;
+  trigger_desc: string | null;
+  trigger_status: string | null;
+  trigger_meta: string;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+// Template JSON types for each template type
+export interface EmailTemplateJson {
+  email_subject: string;
+  email_body: string; // HTML string
+  to: string;
+  from: string;
+}
+
+export interface WebhookTemplateJson {
+  webhook_body: string; // JSON string
+  headers: TriggerHeader[];
+  url: string;
+}
+
+export interface SlackTemplateJson {
+  slack_body: string; // JSON string
+  url: string;
+}
+
+export interface DiscordTemplateJson {
+  discord_body: string; // JSON string
+  url: string;
+}
+
+export interface TriggerHeader {
+  key: string;
+  value: string;
+}
+export interface TriggerMeta extends EmailTemplateJson, WebhookTemplateJson, SlackTemplateJson, DiscordTemplateJson {}
+
+export interface TriggerRecordInsert {
+  name: string;
+  trigger_type?: string | null;
+  trigger_desc?: string | null;
+  trigger_status?: string | null;
+  trigger_meta?: string | null;
+}
+
+// ============ general_email_templates table ============
+export interface GeneralEmailTemplateRecord {
+  template_id: string;
+  template_subject: string | null;
+  template_html_body: string | null;
+  template_text_body: string | null;
+}
+
+export interface GeneralEmailTemplateRecordInsert {
+  template_id: string;
+  template_subject?: string | null;
+  template_html_body?: string | null;
+  template_text_body?: string | null;
+}
+
+// ============ users table ============
+export interface UserRecord {
+  id: number;
+  email: string;
+  name: string;
+  password_hash: string;
+  is_active: number;
+  is_verified: number;
+  auth_provider: "local" | "oidc";
+  oidc_sub: string | null;
+  role_ids: string[]; // Array of role IDs
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface UserRecordInsert {
+  email: string;
+  name: string;
+  password_hash: string;
+  role_ids: string[]; // Array of role IDs
+  is_active?: number;
+  is_verified?: number;
+  is_owner?: string;
+  auth_provider?: "local" | "oidc";
+  oidc_sub?: string | null;
+}
+
+export interface UserRecordPublic {
+  id: number;
+  email: string;
+  name: string;
+  is_active: number;
+  is_verified: number;
+  is_owner: string;
+  auth_provider: "local" | "oidc";
+  oidc_sub: string | null;
+  role_ids: string[];
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+export interface UserRecordDashboard extends UserRecordPublic {
+  has_password: boolean;
+}
+
+// ============ oidc_group_role_mappings table ============
+export interface OidcGroupRoleMappingRecord {
+  id: number;
+  oidc_group: string;
+  role_id: string;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface OidcGroupRoleMappingInsert {
+  oidc_group: string;
+  role_id: string;
+}
+
+// ============ roles table ============
+export interface RoleRecord {
+  id: string;
+  role_name: string;
+  readonly: number;
+  status: string;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface RolePermissionRecord {
+  roles_id: string;
+  permissions_id: string;
+  status: string;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface UserRoleRecord {
+  roles_id: string;
+  users_id: number;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+// ============ api_keys table ============
+export interface ApiKeyRecord {
+  id: number;
+  name: string;
+  hashed_key: string;
+  masked_key: string;
+  status: string;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface ApiKeyRecordInsert {
+  name: string;
+  hashed_key: string;
+  masked_key: string;
+  status?: string;
+}
+
+// ============ incidents table ============
+export interface IncidentRecord {
+  id: number;
+  title: string;
+  start_date_time: number;
+  end_date_time: number | null;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+  status: string;
+  state: string;
+  incident_type: string;
+  incident_source: string;
+  is_global: string;
+}
+
+export interface IncidentMonitorImpact {
+  monitor_tag: string;
+  monitor_impact: string;
+  monitor_name: string;
+  monitor_image: string | null;
+}
+
+export interface IncidentForMonitorList {
+  id: number;
+  title: string;
+  start_date_time: number;
+  end_date_time: number | null;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+  status: string;
+  state: string;
+  monitors: IncidentMonitorImpact[];
+}
+
+export interface IncidentForMonitorListWithComments extends IncidentForMonitorList {
+  comments: IncidentCommentRecord[];
+}
+
+export interface IncidentRecordInsert {
+  title: string;
+  start_date_time: number;
+  end_date_time?: number | null;
+  status?: string;
+  state?: string;
+  incident_type?: string;
+  incident_source?: string;
+  is_global?: string;
+}
+
+// ============ incident_monitors table ============
+export interface IncidentMonitorRecord {
+  id: number;
+  monitor_tag: string;
+  monitor_impact: string | null;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+  incident_id: number;
+}
+
+export interface IncidentMonitorRecordInsert {
+  monitor_tag: string;
+  monitor_impact?: string | null;
+  incident_id: number;
+}
+
+export interface IncidentMonitorDetailRecord {
+  id: number;
+  monitor_tag: string;
+  monitor_impact: string | null;
+  monitor_name: string;
+  monitor_image: string | null;
+  monitor_description: string | null;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+  incident_id: number;
+}
+
+// ============ incident_comments table ============
+export interface IncidentCommentRecord {
+  id: number;
+  comment: string;
+  incident_id: number;
+  commented_at: number;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+  status: string;
+  state: string;
+}
+
+// ============ Filter types ============
+export interface IncidentFilter {
+  status?: string;
+  start?: number;
+  end?: number;
+  state?: string;
+  id?: number;
+  incident_type?: string;
+  incident_source?: string;
+}
+
+export interface TriggerFilter {
+  status?: string;
+}
+
+// ============ Count result ============
+export interface CountResult {
+  count: number | string;
+}
+
+// ============ images table ============
+export interface ImageRecord {
+  id: string;
+  data: string; // base64 encoded image data
+  mime_type: string;
+  original_name: string | null;
+  width: number | null;
+  height: number | null;
+  size: number | null;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface ImageRecordInsert {
+  id: string;
+  data: string;
+  mime_type: string;
+  original_name?: string | null;
+  width?: number | null;
+  height?: number | null;
+  size?: number | null;
+}
+
+// ============ pages table ============
+export interface PageRecord {
+  id: number;
+  page_path: string;
+  page_title: string;
+  page_header: string;
+  page_subheader: string | null;
+  page_logo: string | null;
+  page_settings_json: string | null;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface PageRecordInsert {
+  page_path: string;
+  page_title: string;
+  page_header: string;
+  page_subheader?: string | null;
+  page_logo?: string | null;
+  page_settings_json?: string | null;
+}
+
+export interface PageSettingsType {
+  monitor_status_history_days: {
+    desktop: number;
+    mobile: number;
+  };
+  monitor_layout_style: PageMonitorLayoutStyle;
+  metaPageTitle?: string;
+  metaPageDescription?: string;
+  socialPagePreviewImage?: string;
+}
+
+export interface PageRecordTyped {
+  id: number;
+  page_path: string;
+  page_title: string;
+  page_header: string;
+  page_subheader: string | null;
+  page_logo: string | null;
+  page_settings: PageSettingsType | null;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+// ============ pages_monitors table ============
+export interface PageMonitorRecord {
+  page_id: number;
+  monitor_tag: string;
+  monitor_settings_json: string | null;
+  position: number;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface PageMonitorRecordInsert {
+  page_id: number;
+  monitor_tag: string;
+  monitor_settings_json?: string | null;
+  position?: number;
+}
+
+export interface PageMonitorRecordTyped {
+  page_id: number;
+  monitor_tag: string;
+  monitor_settings: Record<string, unknown> | null;
+  position: number;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+// ============ Page Filter ============
+export interface PageFilter {
+  id?: number;
+  page_path?: string;
+}
+
+// ============ maintenances table ============
+// Uses iCalendar RRULE for scheduling
+// Reference: http://www.kanzaki.com/docs/ical/rrule.html
+export interface MaintenanceRecord {
+  id: number;
+  title: string;
+  description: string | null;
+  start_date_time: number; // Unix timestamp - when the first occurrence starts
+  rrule: string; // iCalendar RRULE string (e.g., FREQ=WEEKLY;BYDAY=SU or FREQ=MINUTELY;COUNT=1)
+  duration_seconds: number; // Duration of each maintenance window in seconds
+  status: "ACTIVE" | "INACTIVE";
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+  is_global: string;
+}
+
+export interface MaintenanceRecordInsert {
+  title: string;
+  description?: string | null;
+  start_date_time: number;
+  rrule: string;
+  duration_seconds: number;
+  status?: "ACTIVE" | "INACTIVE";
+  is_global?: string;
+}
+
+// ============ maintenance_monitors table ============
+export interface MaintenanceMonitorRecord {
+  id: number;
+  maintenance_id: number;
+  monitor_tag: string;
+  monitor_impact: "UP" | "DOWN" | "DEGRADED" | "MAINTENANCE";
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface MaintenanceMonitorDetailRecord {
+  id: number;
+  maintenance_id: number;
+  monitor_tag: string;
+  monitor_impact: "UP" | "DOWN" | "DEGRADED" | "MAINTENANCE";
+  monitor_name: string;
+  monitor_image: string | null;
+  monitor_description: string | null;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface MaintenanceMonitorDetailRecord {
+  id: number;
+  maintenance_id: number;
+  monitor_tag: string;
+  monitor_impact: "UP" | "DOWN" | "DEGRADED" | "MAINTENANCE";
+  monitor_name: string;
+  monitor_image: string | null;
+  monitor_description: string | null;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface MaintenanceMonitorRecordInsert {
+  maintenance_id: number;
+  monitor_tag: string;
+
+  monitor_impact?: "UP" | "DOWN" | "DEGRADED" | "MAINTENANCE";
+}
+
+// ============ maintenances_events table ============
+export interface MaintenanceEventRecord {
+  id: number;
+  maintenance_id: number;
+  start_date_time: number;
+  end_date_time: number;
+  status: "SCHEDULED" | "READY" | "ONGOING" | "COMPLETED" | "CANCELLED";
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface MaintenanceEventRecordDetailed {
+  id: number;
+  maintenance_id: number;
+  start_date_time: number;
+  end_date_time: number;
+  status: "SCHEDULED" | "READY" | "ONGOING" | "COMPLETED" | "CANCELLED";
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+  title: string;
+  description: string | null;
+}
+
+export interface MaintenanceEventRecordInsert {
+  maintenance_id: number;
+  start_date_time: number;
+  end_date_time: number;
+  status?: "SCHEDULED" | "READY" | "ONGOING" | "COMPLETED" | "CANCELLED";
+}
+
+// ============ Maintenance Filter ============
+export interface MaintenanceFilter {
+  id?: number;
+  status?: "ACTIVE" | "INACTIVE";
+}
+
+export interface MaintenanceEventFilter {
+  id?: number;
+  maintenance_id?: number;
+  status?: "SCHEDULED" | "READY" | "ONGOING" | "COMPLETED" | "CANCELLED";
+}
+
+export interface MaintenanceMonitorImpact {
+  monitor_tag: string;
+  monitor_name: string;
+  monitor_image: string | null;
+  monitor_impact: string;
+}
+
+export interface MaintenanceEventsMonitorList {
+  id: number;
+  title: string;
+  status: string;
+  description: string | null;
+  start_date_time: number; // Unix timestamp - when the first occurrence starts
+  end_date_time: number; // Unix timestamp - when the first occurrence ends
+  is_global: YesNoType; // "YES" when the maintenance affects all monitors (no per-monitor rows)
+  monitors: MaintenanceMonitorImpact[];
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+// ============ monitor_alerts_config table ============
+export type AlertForType = "STATUS" | "LATENCY" | "UPTIME";
+export type AlertSeverityType = "CRITICAL" | "WARNING";
+export type YesNoType = "YES" | "NO";
+
+export interface MonitorAlertConfigRecord {
+  id: number;
+  monitor_tag: string | null;
+  alert_for: AlertForType;
+  alert_value: string;
+  failure_threshold: number;
+  success_threshold: number;
+  alert_description: string | null;
+  create_incident: YesNoType;
+  is_active: YesNoType;
+  severity: AlertSeverityType;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface MonitorAlertConfigInsert {
+  monitor_tag?: string | null;
+  alert_for: AlertForType;
+  alert_value: string;
+  failure_threshold: number;
+  success_threshold: number;
+  alert_description?: string | null;
+  create_incident?: YesNoType;
+  is_active?: YesNoType;
+  severity?: AlertSeverityType;
+}
+
+export interface MonitorAlertConfigUpdate {
+  alert_for?: AlertForType;
+  alert_value?: string;
+  failure_threshold?: number;
+  success_threshold?: number;
+  alert_description?: string | null;
+  create_incident?: YesNoType;
+  is_active?: YesNoType;
+  severity?: AlertSeverityType;
+}
+
+export interface MonitorAlertConfigFilter {
+  id?: number;
+  monitor_tag?: string;
+  alert_for?: AlertForType;
+  is_active?: YesNoType;
+}
+
+// ============ monitor_alerts_config_triggers table ============
+export interface MonitorAlertConfigTriggerRecord {
+  monitor_alerts_id: number;
+  trigger_id: number;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface MonitorAlertConfigTriggerInsert {
+  monitor_alerts_id: number;
+  trigger_id: number;
+}
+
+// ============ monitor_alerts_config_monitors table ============
+export interface MonitorAlertConfigMonitorRecord {
+  monitor_alerts_id: number;
+  monitor_tag: string;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface MonitorAlertConfigMonitorInsert {
+  monitor_alerts_id: number;
+  monitor_tag: string;
+}
+
+// ============ Composite types for monitor_alerts_config ============
+export interface MonitorAlertConfigWithTriggers extends MonitorAlertConfigRecord {
+  triggers: TriggerRecord[];
+  monitor_tags: string[];
+}
+
+export interface MonitorAlertConfigCreateInput {
+  monitor_tags: string[];
+  alert_for: AlertForType;
+  alert_value: string;
+  failure_threshold: number;
+  success_threshold: number;
+  alert_description?: string | null;
+  create_incident?: YesNoType;
+  is_active?: YesNoType;
+  severity?: AlertSeverityType;
+  trigger_ids?: number[];
+}
+
+export interface MonitorAlertConfigUpdateInput {
+  id: number;
+  monitor_tags?: string[];
+  alert_for?: AlertForType;
+  alert_value?: string;
+  failure_threshold?: number;
+  success_threshold?: number;
+  alert_description?: string | null;
+  create_incident?: YesNoType;
+  is_active?: YesNoType;
+  severity?: AlertSeverityType;
+  trigger_ids?: number[];
+}
+
+// ============ monitor_alerts_v2 table ============
+export type MonitorAlertStatusType = "TRIGGERED" | "RESOLVED";
+
+export interface MonitorAlertV2Record {
+  id: number;
+  config_id: number;
+  monitor_tag: string | null;
+  incident_id: number | null;
+  alert_status: MonitorAlertStatusType;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface MonitorAlertV2Insert {
+  config_id: number;
+  monitor_tag?: string | null;
+  incident_id?: number | null;
+  alert_status: MonitorAlertStatusType;
+}
+
+export interface MonitorAlertV2Update {
+  monitor_tag?: string | null;
+  incident_id?: number | null;
+  alert_status?: MonitorAlertStatusType;
+}
+
+export interface MonitorAlertV2Filter {
+  id?: number;
+  config_id?: number;
+  monitor_tag?: string;
+  incident_id?: number;
+  alert_status?: MonitorAlertStatusType;
+}
+
+// Composite type with config details
+export interface MonitorAlertV2WithConfig extends MonitorAlertV2Record {
+  config: MonitorAlertConfigRecord;
+}
+
+// ============ subscription_config table ============
+export interface SubscriptionEventsEnabled {
+  incidentUpdatesAll: boolean;
+  maintenanceUpdatesAll: boolean;
+  monitorUpdatesAll: boolean;
+}
+
+export interface SubscriptionMethodsEnabled {
+  email: boolean;
+  webhook: boolean;
+  slack: boolean;
+  discord: boolean;
+}
+
+export interface SubscriptionMethodTriggers {
+  email: number | null;
+  webhook: number | null;
+  slack: number | null;
+  discord: number | null;
+}
+
+export interface SubscriptionConfigRecord {
+  id: number;
+  events_enabled: string;
+  methods_enabled: string;
+  method_triggers: string;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface SubscriptionConfigParsed {
+  id: number;
+  events_enabled: SubscriptionEventsEnabled;
+  methods_enabled: SubscriptionMethodsEnabled;
+  method_triggers: SubscriptionMethodTriggers;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface SubscriptionConfigUpdate {
+  events_enabled?: string;
+  methods_enabled?: string;
+  method_triggers?: string;
+}
+
+// ============ New Subscription System (v2) ============
+
+export type SubscriptionMethodType = "email";
+export type SubscriptionEventType = "incidents" | "maintenances";
+export type SubscriptionStatus = "ACTIVE" | "INACTIVE";
+export type SubscriberUserStatus = "PENDING" | "ACTIVE" | "INACTIVE";
+
+// ============ subscriber_users table ============
+export interface SubscriberUserRecord {
+  id: number;
+  email: string;
+  status: SubscriberUserStatus;
+  verification_code: string | null;
+  verification_expires_at: Date | null;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface SubscriberUserRecordInsert {
+  email: string;
+  status?: SubscriberUserStatus;
+  verification_code?: string | null;
+  verification_expires_at?: Date | null;
+}
+
+// ============ subscriber_methods table ============
+export interface SubscriberMethodRecord {
+  id: number;
+  subscriber_user_id: number;
+  method_type: SubscriptionMethodType;
+  method_value: string;
+  status: SubscriptionStatus;
+  meta: string | null; // JSON for extra config
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface SubscriberMethodRecordInsert {
+  subscriber_user_id: number;
+  method_type: SubscriptionMethodType;
+  method_value: string;
+  status?: SubscriptionStatus;
+  meta?: string | null;
+}
+
+// ============ user_subscriptions_v2 table ============
+export interface UserSubscriptionV2Record {
+  id: number;
+  subscriber_user_id: number;
+  subscriber_method_id: number;
+  event_type: SubscriptionEventType;
+
+  status: SubscriptionStatus;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface UserSubscriptionV2RecordInsert {
+  subscriber_user_id: number;
+  subscriber_method_id: number;
+  event_type: SubscriptionEventType;
+
+  status?: SubscriptionStatus;
+}
+
+export interface UserSubscriptionV2Filter {
+  subscriber_user_id?: number;
+  subscriber_method_id?: number;
+  event_type?: SubscriptionEventType;
+
+  status?: SubscriptionStatus;
+}
+
+// ============ Old types (kept for compatibility) ============
+
+export interface UserSubscriptionRecord {
+  id: number;
+  subscriber_id: number;
+  subscription_method: SubscriptionMethodType;
+  event_type: SubscriptionEventType;
+
+  status: SubscriptionStatus;
+  created_at: DbTimestamp;
+  updated_at: DbTimestamp;
+}
+
+export interface UserSubscriptionRecordInsert {
+  subscriber_id: number;
+  subscription_method: SubscriptionMethodType;
+  event_type: SubscriptionEventType;
+
+  status?: SubscriptionStatus;
+}
+
+export interface UserSubscriptionFilter {
+  subscriber_id?: number;
+  subscription_method?: SubscriptionMethodType;
+  event_type?: SubscriptionEventType;
+
+  status?: SubscriptionStatus;
+}
+
+// Aggregated view for admin
+export interface SubscriberSummary {
+  id: number;
+  subscriber_send: string;
+  subscriber_type: string;
+  subscriber_status: string;
+  created_at: DbTimestamp;
+  subscription_count: number;
+  event_types: SubscriptionEventType[];
+}
+
+// Template JSON types for each template type
+export interface EmailTemplateJson {
+  email_subject: string;
+  email_body: string; // HTML string
+}
+
+export interface WebhookTemplateJson {
+  webhook_body: string; // JSON string
+}
+
+export interface SlackTemplateJson {
+  slack_body: string; // JSON string
+}
+
+export interface DiscordTemplateJson {
+  discord_body: string; // JSON string
+}
+
+export interface TriggerHeader {
+  key: string;
+  value: string;
+}
+export interface TriggerMeta extends EmailTemplateJson, WebhookTemplateJson, SlackTemplateJson, DiscordTemplateJson {
+  url: string;
+  headers: TriggerHeader[];
+  to: string;
+  from: string;
+}
+
+export interface SubscriptionsConfig {
+  enable: boolean;
+  methods: {
+    emails: {
+      incidents: boolean;
+      maintenances: boolean;
+    };
+  };
+}
